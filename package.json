@@ -8,7 +8,7 @@
   },
   "pear": {
     "gui": {
-      "backgroundColor": "#1F2430",
+      "backgroundColor": "#ffffff",
       "height": 540,
       "width": 720
     }
@@ -23,6 +23,7 @@
     "corestore": "^6.15.11",
     "hyperdrive": "^11.6.2",
     "hyperswarm": "^4.7.8",
+    "localdrive": "^1.11.1",
     "protomux-rpc": "^1.5.1"
   }
 }
