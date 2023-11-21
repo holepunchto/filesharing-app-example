@@ -1,0 +1,28 @@
+{
+  "name": "first",
+  "main": "index.html",
+  "type": "module",
+  "scripts": {
+    "dev": "pear dev",
+    "test": "brittle test/*.test.js"
+  },
+  "pear": {
+    "gui": {
+      "backgroundColor": "#1F2430",
+      "height": 540,
+      "width": 720
+    }
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "brittle": "^3.0.0",
+    "joyrider": "^1.0.0"
+  },
+  "dependencies": {
+    "corestore": "^6.15.11",
+    "hyperdrive": "^11.6.2",
+    "hyperswarm": "^4.7.8",
+    "protomux-rpc": "^1.5.1"
+  }
+}

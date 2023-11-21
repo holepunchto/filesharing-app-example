@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body > h1:nth-of-type(1) { cursor: pointer }
+      html, body {
+        background-color: white;
+      }
+    </style>
+    <script type='module' src='./app.js'></script>
+  </head>
+  <body>
+    <h1>Realtime file sharing <span id="name"></span></h1>
+    <div>
+      <input id="file" type="file" />
+    </div>
+    <h2>Your fine peers</h2>
+    <div id="peers">No peers connected</div>
+    <h2>Your awesome files</h2>
+    <div id="files">No files</div>
+  </body>
+</html>
