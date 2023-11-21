@@ -56,10 +56,8 @@ async function initSwarm() {
     peers[key] = conn
 
     conn.setKeepAlive(5000)
-    // conn.write(JSON.stringify({ type: 'init', name, driveDiscoveryKey: drive.discoveryKey }))
 
-    // store.replicate(conn)
-    drive.replicate(conn)
+    store.replicate(conn)
 
     if (sharedFilename) {
       conn.write(JSOIN.stringify({ type: 'file', filename: sharedFilename }))
@@ -68,46 +66,16 @@ async function initSwarm() {
     const rpc = new ProtomuxRPC(conn)
     // Register for when the peer says hello to us
     rpc.respond('hello', req => {
-      const { name, driveDiscoveryKey } = JSON.parse(req.toString())
+      const { name, driveKey } = JSON.parse(req.toString())
       conn.name = name
-      conn.drive = new Hyperdrive(store, driveDiscoveryKey)
+      conn.drive = new Hyperdrive(store, driveKey)
       console.log('received hello')
-      console.log(name, driveDiscoveryKey)
+      console.log(name, driveKey)
       render()
     })
     // Say hello to the peer
-    rpc.request('hello', Buffer.from(JSON.stringify({ name, driveDiscoveryKey: drive.discoveryKey })))
+    rpc.request('hello', Buffer.from(JSON.stringify({ name, driveKey: drive.key.toString('hex') })))
 
-    // conn.on('data', data => {
-    //   console.log('[on(data)]', data.toString())
-
-    //   // try-catch needed because we sometimes got empty data. Not sure why we got this or where we got it from
-    //   let msg
-    //   try {
-    //     msg = JSON.parse(data)
-    //   } catch (err) {
-    //     console.error(err)
-    //     console.log(`[error] Incorrect data received from key=${key} data=${data}`)
-    //     return
-    //   }
-
-    //   const { type } = msg
-    //     if (type === 'init') {
-    //       const { name, driveDiscoveryKey } = msg
-    //       conn.name = name
-    //       // conn.driveDiscoveryKey = driveDiscoveryKey
-    //       conn.driveClone = new Hyperdrive(store, conn.driveDiscoveryKey)
-    //       console.log(`[init] name=${name} driveDiscoveryKey=${driveDiscoveryKey}`)
-    //       render()
-    //     }
-
-    //     if (type === 'file') {
-    //       const { filename } = msg
-    //       conn.filename = filename
-    //       console.log(`[file] name=${conn.name} filename=${conn.filename}`)
-    //       render()
-    //     }
-    // })
     conn.on('error', err => console.error(err)) // Needed because otherwise teardowns result in exceptions
     conn.on('close', () => {
       delete peers[key]
