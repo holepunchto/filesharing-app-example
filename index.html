@@ -10,57 +10,106 @@
         background-color: #ffffff;
       }
 
-      #name {
+      #user-name {
         cursor: pointer;
       }
-      #name:hover {
+      #user-name:hover {
         text-decoration: underline;
       }
 
-      .file-view {
+      .panels {
         display: flex;
-        justify-content: space-around;
+        justify-content: space-between;
       }
 
-      .file {
+      .file__name {
         cursor: pointer;
         color: blue;
       }
-      .file:hover {
+      .file__name:hover {
         text-decoration: underline;
       }
 
-      .delete {
+      .file__delete {
         cursor: pointer;
         margin-right: 5px;
+        font-size: 11px;
+        display: none;
       }
-      .delete:hover {
+      .file:hover .file__delete {
+        display: inline-block;
+      }
+      .file__delete:hover {
         text-decoration: underline;
       }
 
-      .peer-name.online {
+      .peer__name--online {
         color: green;
       }
-      .peer-name.offline {
+      .peer__name--offline {
         color: red;
+      }
+
+      .modal {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        background-color: #00000055;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .modal__box {
+        background-color: #cda0bb;
+        height: 200px;
+        width: 500px;
+        display: flex;
+        flex-direction: column;
+        padding: 10px;
+        border-radius: 10px;
+      }
+      .modal__box--prompt {
+        height: 150px;
+      }
+      .modal__box--alert {
+        height: 80px;
+      }
+      .modal__title {
+        height: 30px;
+        font-size: 20px;
+      }
+      .modal__body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .modal__buttons {
+        height: 30px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 20px;
       }
     </style>
     <script type='module' src='./app.js'></script>
   </head>
   <body>
-    <h1>File cloud sharer <span id="name"></span></h1>
+
+    <h1>File cloud sharer <span id="user-name"></span></h1>
     <div>
       <input id="upload-file" type="file" value="Add file to share" />
       <input id="create-file" type="button" value="Create random file" />
     </div>
-    <div class="file-view">
-      <div class="peers-wrapper">
+    <div class="panels">
+      <div class="peers-panel">
         <h2>Your fine peers</h2>
         <div id="peers">No peers connected</div>
       </div>
-      <div class="you-wrapper">
+      <div class="user-panel">
         <h2>Your shared files</h2>
-        <div id="files">No files</div>
+        <div id="user-shared-files">No files</div>
       </div>
     </div>
   </body>

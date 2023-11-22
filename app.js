@@ -6,17 +6,18 @@ import Corestore from 'corestore'
 import ProtomuxRPC from 'protomux-rpc'
 import Localdrive from 'localdrive'
 import downloadsFolder from 'downloads-folder'
+import $ from 'jquery'
 
 const { app } = await versions()
 const userStore = new Corestore(config.storage)
 const userDrive = new Hyperdrive(userStore)
 const userLocalDrive = new Localdrive(downloadsFolder())
 const userProfile = {}
-const $peers = document.querySelector('#peers')
-const $sharedFiles = document.querySelector('#files')
-const $uploadFile = document.querySelector('#upload-file')
-const $createFile = document.querySelector('#create-file')
-const $name = document.querySelector('#name')
+const $peers = $('#peers')
+const $userSharedFiles = $('#user-shared-files')
+const $uploadFile = $('#upload-file')
+const $createFile = $('#create-file')
+const $userName = $('#user-name')
 const swarm = new Hyperswarm({
   keyPair: await userStore.createKeyPair('first-app')
 })
@@ -70,21 +71,21 @@ async function initAllKnownPeersDrives() {
 }
 
 function addDomEventHandlers() {
-  $createFile.addEventListener('click', async e => {
+  $createFile.on('click', async e => {
     const filename = Math.floor(1000000000 * Math.random())
     await userDrive.put(`/files/${filename}.txt`, Buffer.from('hello world'))
     console.log('Random file added')
   })
 
-  $uploadFile.addEventListener('change', async e => {
+  $uploadFile.on('change', async e => {
     for (const file of e.target.files) {
       const data = await file.arrayBuffer()
       userDrive.put(`/files/${file.name}`, data)
     }
   })
 
-  $name.addEventListener('click', async () => {
-    const newName = `i_am_${Math.floor(1000 * Math.random())}`
+  $userName.on('click', async () => {
+    const newName = await prompt('What is your new name?', userProfile.name)
     userProfile.name = newName
     await saveProfile()
     render()
@@ -165,6 +166,60 @@ async function startFilesWatcher(drive) {
   }
 }
 
+async function alert(message) {
+  return new Promise((resolve) => {
+    const $modal = $(`
+      <div class="modal">
+        <div class="modal__box modal__box--alert">
+          <div class="modal__title">
+            ${message}
+          </div>
+          <div class="modal__buttons">
+            <button class="modal__confirm">Ok</button>
+          </div>
+        </div>
+      </div>
+    `)
+
+    $('.modal__confirm', $modal).on('click', () => {
+      $modal.remove()
+      resolve()
+    })
+    $('body').append($modal)
+  })
+}
+
+async function prompt(message, defaultValue = '') {
+  return new Promise((resolve, reject) => {
+    const $modal = $(`
+      <div class="modal">
+        <div class="modal__box modal__box--prompt">
+          <div class="modal__title">
+            ${message}
+          </div>
+          <div class="modal__body">
+            <input class="modal__input" type="text" value="${defaultValue}" />
+          </div>
+          <div class="modal__buttons">
+            <button class="modal__cancel">Cancel</button>
+            <button class="modal__confirm">Done</button>
+          </div>
+        </div>
+      </div>
+    `)
+
+    $('.modal__cancel', $modal).on('click', () => {
+      $modal.remove()
+      reject()
+    })
+    $('.modal__confirm', $modal).on('click', () => {
+      $modal.remove()
+      resolve($('.modal__input', $modal).val())
+    })
+    $('body').append($modal)
+  })
+}
+
 async function render() {
   const $newPeers = []
   const $newSharedFiles = await renderFolder({ drive: userDrive, allowDeletion: true })
@@ -174,64 +229,70 @@ async function render() {
     $newPeers.push(await renderPeer({ key }))
   }
 
-  $name.innerText = `(${userProfile.name})`
-  $peers.replaceChildren(...$newPeers)
-  $sharedFiles.replaceChildren(...$newSharedFiles)
+  $userName.text(`(${userProfile.name})`)
+  $peers.empty().append($newPeers)
+  $userSharedFiles.empty().append($newSharedFiles)
 }
 
 async function renderPeer({ key }) {
   const peerProfile = knownPeersProfiles[key]
   const isOnline = knownPeersOnlineStatus[key]
-  const $wrapper = document.createElement('div')
+  const $wrapper = $(`
+    <div class="peer">
+      <div class="peer__name ${isOnline ? 'peer__name--online' : 'peer__name--offline'}">
+        ${peerProfile?.name}
+      </div>
+      <div class="peer__files"></div>
+    </div>
+  `)
 
-  const $peerName = document.createElement('div')
-  $peerName.classList.add('peer-name')
-  $peerName.classList.add(isOnline ? 'online' : 'offline')
-  $peerName.innerText = peerProfile?.name
-
-  const $peerFiles = document.createElement('div')
-  $peerFiles.innerText = 'No files shared'
-  const peerFilesElems = await renderFolder({
+  const $peerFiles = await renderFolder({
     drive: knownPeersDrives[key],
     allowDeletion: false
   })
-  const hasFiles = peerFilesElems.length > 0
-  if (hasFiles) $peerFiles.replaceChildren(...peerFilesElems)
 
-  $wrapper.appendChild($peerName)
-  $wrapper.appendChild($peerFiles)
-
+  $('.peer__files', $wrapper).append($peerFiles)
   return $wrapper
 }
 
 async function renderFolder({ drive, allowDeletion = false }) {
-  if (!drive) return []
+  const $wrapper = $('<div>No files shared</div>')
+
+  if (!drive) return $wrapper
 
   const $files = []
   const files = drive.list('/files', { recursive: false })
   for await (const file of files) {
-    const $wrapper = document.createElement('div')
-
-    const $file = document.createElement('span')
+    console.log('file', file)
+    const $wrapper = $('<div class="file"></div>')
     const filename = file.key.split('/').pop()
-    $file.classList.add('file')
-    $file.innerText = filename
-    $file.addEventListener('click', async () => {
+    const $file = $(`
+      <span class="file__name">
+        ${filename}
+      </span>
+    `)
+    $file.on('click', async () => {
       const rs = drive.createReadStream(file.key)
       const ws = userLocalDrive.createWriteStream(filename)
       rs.pipe(ws)
+      rs.on('end', () => alert(`${filename} downloaded`))
     })
 
-    const $delete = document.createElement('span')
-    $delete.classList.add('delete')
-    $delete.innerText = '❌'
-    $delete.addEventListener('click', () => drive.del(file.key))
+    const $delete = $(`
+      <span class="file__delete">
+        ❌
+      </span>
+    `)
+    $delete.on('click', () => drive.del(file.key))
 
-    $wrapper.appendChild($file)
-    if (allowDeletion) $wrapper.appendChild($delete)
+    $wrapper.append($file)
+    if (allowDeletion) $wrapper.append($delete)
 
     $files.push($wrapper)
   }
 
-  return $files
+  const hasFiles = $files.length > 0
+  if (hasFiles) $wrapper.empty().append($files)
+
+  return $wrapper
 }

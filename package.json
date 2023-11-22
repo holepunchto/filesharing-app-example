@@ -25,6 +25,7 @@
     "hyperbee": "^2.17.0",
     "hyperdrive": "^11.6.2",
     "hyperswarm": "^4.7.8",
+    "jquery": "^3.7.1",
     "localdrive": "^1.11.1",
     "protomux-rpc": "^1.5.1"
   }
