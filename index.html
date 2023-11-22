@@ -10,6 +10,13 @@
         background-color: #ffffff;
       }
 
+      #name {
+        cursor: pointer;
+      }
+      #name:hover {
+        text-decoration: underline;
+      }
+
       .file-view {
         display: flex;
         justify-content: space-around;
@@ -34,7 +41,7 @@
     <script type='module' src='./app.js'></script>
   </head>
   <body>
-    <h1>Realtime file sharing <span id="name"></span></h1>
+    <h1>File cloud sharer <span id="name"></span></h1>
     <div>
       <input id="upload-file" type="file" value="Add file to share" />
       <input id="create-file" type="button" value="Create random file" />

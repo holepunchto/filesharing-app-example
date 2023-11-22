@@ -1,72 +1,93 @@
-import { versions, config, messages, Window, teardown } from 'pear'
+import { versions, config, teardown } from 'pear'
 import Hyperbee from 'hyperbee'
 import Hyperswarm from 'hyperswarm'
 import Hyperdrive from 'hyperdrive'
 import Corestore from 'corestore'
 import ProtomuxRPC from 'protomux-rpc'
 import Localdrive from 'localdrive'
-import path from 'path'
 import downloadsFolder from 'downloads-folder'
 
 const { app } = await versions()
-const name = pear.config.storage.split('/').pop() // Since we can't pass args to the app for now, this is a hack to do that
-const store = new Corestore(pear.config.storage)
-const drive = new Hyperdrive(store)
-const localDrive = new Localdrive(downloadsFolder())
+const userStore = new Corestore(config.storage)
+const userDrive = new Hyperdrive(userStore)
+const userLocalDrive = new Localdrive(downloadsFolder())
+const userProfile = {}
 const $peers = document.querySelector('#peers')
 const $files = document.querySelector('#files')
 const $uploadFile = document.querySelector('#upload-file')
 const $createFile = document.querySelector('#create-file')
 const $name = document.querySelector('#name')
 const swarm = new Hyperswarm({
-  keyPair: await store.createKeyPair('first-app')
+  keyPair: await userStore.createKeyPair('first-app')
 })
-const knownPeers = new Hyperbee(store.get({
+const knownPeersDrives = {}
+const knownPeersProfiles = {}
+const knownPeersOnlineStatus = {}
+const knownPeers = new Hyperbee(userStore.get({
   name: 'peers'
 }), {
   keyEncoding: 'utf-8',
   valueEncoding: 'json'
 })
-const knownPeersDrives = {}
 
+// Attach teardown handler before any async calls (after swam has been initiated)
 teardown(async () => {
   await swarm.destroy()
-  await store.close()
+  await userStore.close()
 })
 
-initFileInputs()
+addDomEventHandlers()
 await initSwarm()
-await initAllDrives()
-await drive.ready()
-startWatcher(drive)
+await initProfile()
+await initAllKnownPeersDrives()
+await userDrive.ready()
+startFilesWatcher(userDrive)
 await render()
 console.log('Startup completed')
 
-// get all known peers from hyperbee and connect to their hyperdrive
-// const allPeers = await db.getAll()
-// allPeers.forEach(peer => new Hyperdrive(store, peer.driveKey))
+async function initProfile() {
+  const exists = await userDrive.exists('/meta/profile.json')
+  if (!exists) await userDrive.put('/meta/profile.json', Buffer.from(JSON.stringify({ name: 'No name' })))
+  const storedProfile = JSON.parse(await userDrive.get('/meta/profile.json'))
+  Object.assign(userProfile, storedProfile)
+}
 
-async function initAllDrives() {
-  for await (const { key, value: { name, driveKey } } of knownPeers.createReadStream()) {
-    console.log(`[initAllDrives] Start drive for ${name}(${key})`)
-    const peerDrive = new Hyperdrive(store, driveKey)
+async function saveProfile() {
+  await userDrive.put('/meta/profile.json', Buffer.from(JSON.stringify(userProfile)))
+}
+
+async function initAllKnownPeersDrives() {
+  for await (const { key, value: { driveKey } } of knownPeers.createReadStream()) {
+    console.log(`[initAllKnownPeersDrives] Start init for key=${key} driveKey=${driveKey}`)
+    const peerDrive = new Hyperdrive(userStore, driveKey)
+    const peerProfile = JSON.parse(await peerDrive.get('/meta/profile.json')) // This await forever until able to get /meta/profile.json
     knownPeersDrives[key] = peerDrive
-    startWatcher(peerDrive)
+    knownPeersProfiles[key] = peerProfile
+    startMetaWatcher(key)
+    startFilesWatcher(peerDrive)
+    console.log(`[initAllKnownPeersDrives] Done initiating for name=${peerProfile.name} key=${key} driveKey=${driveKey}`)
   }
 }
 
-function initFileInputs() {
+function addDomEventHandlers() {
   $createFile.addEventListener('click', async e => {
     const filename = Math.floor(1000000000 * Math.random())
-    await drive.put(`/${filename}.txt`, Buffer.from('hello world'))
+    await userDrive.put(`/files/${filename}.txt`, Buffer.from('hello world'))
     console.log('Random file added')
   })
 
   $uploadFile.addEventListener('change', async e => {
     for (const file of e.target.files) {
       const data = await file.arrayBuffer()
-      drive.put(`/${file.name}`, data)
+      userDrive.put(`/files/${file.name}`, data)
     }
+  })
+
+  $name.addEventListener('click', async () => {
+    const newName = `i_am_${Math.floor(1000 * Math.random())}`
+    userProfile.name = newName
+    await saveProfile()
+    render()
   })
 }
 
@@ -76,12 +97,15 @@ async function initSwarm() {
     const rpc = new ProtomuxRPC(conn)
     console.log('[connection joined]', info)
 
-    store.replicate(conn)
-    // If someone asks who we are, then tell them
+    userStore.replicate(conn)
+
+    // If someone asks who we are, then tell them our driveKey
     rpc.respond('whoareyou', async req => {
       console.log('[whoareyou respond]')
-      // should not send name, but name should be in a profile.json in the hyperdrive
-      return Buffer.from(JSON.stringify({ name, driveKey: drive.key.toString('hex') }))
+      // TODO: should not send name, but name should be in a profile.json in the hyperdrive
+      return Buffer.from(JSON.stringify({
+        driveKey: userDrive.key.toString('hex')
+      }))
     })
 
     conn.on('close', () => {
@@ -99,17 +123,16 @@ async function initSwarm() {
 
     console.log('[whoareyou request This peer is new, ask them who they are')
     const reply = await rpc.request('whoareyou')
-    const { name: peerName, driveKey: peerDriveKey } = JSON.parse(reply.toString())
-    await knownPeers.put(key, { name: peerName, driveKey: peerDriveKey })
-
-    console.log(`[whoareyou response] peerName=${peerName} peerDriveKey=${peerDriveKey}`)
-    // conn.name = name
-    // const drive = new Hyperdrive(store, driveKey)
-    // await drive.ready()
-    // const files = await ls({ drive, path: '/' })
-    // conn.drive = drive
-    // startWatcher(drive) // render, when a file is added/removed
-    // render()
+    const { driveKey: peerDriveKey } = JSON.parse(reply.toString())
+    await knownPeers.put(key, { driveKey: peerDriveKey })
+    const peerDrive = new Hyperdrive(userStore, peerDriveKey)
+    const peerProfile = JSON.parse(await peerDrive.get('/meta/profile.json'))
+    knownPeersDrives[key] = peerDrive
+    knownPeersProfiles[key] = peerProfile
+    startMetaWatcher(key)
+    startFilesWatcher(peerDrive)
+    render()
+    console.log(`[whoareyou response] peerDriveKey=${peerDriveKey}`)
   })
 
   // If this is an example app, then this key preferably should not be in sourcecode
@@ -120,9 +143,18 @@ async function initSwarm() {
   await discovery.flushed()
 }
 
-async function startWatcher(drive) {
-  console.log('[startWatcher]')
-  const watcher = drive.watch('/')
+async function startMetaWatcher(key) {
+  const peerDrive = knownPeersDrives[key]
+  const watcher = peerDrive.watch('/meta')
+  for await (const _ of watcher) {
+    console.log(`Peer profile updated key=${key}`)
+    knownPeersProfiles[key] = JSON.parse(await peerDrive.get('/meta/profile.json'))
+    render()
+  }
+}
+
+async function startFilesWatcher(drive) {
+  const watcher = drive.watch('/files')
   for await (const _ of watcher) {
     render()
   }
@@ -143,15 +175,16 @@ async function ls({ drive, path }) {
 async function render() {
   // const peersConn = swarm.connections
   // const hasPeers = peersConn.size > 0
-  const filesElems = await renderFolderDom({ drive, allowDeletion: true })
+  const filesElems = await renderFolderDom({ userDrive, allowDeletion: true })
   const hasFiles = filesElems.length > 0
   const peersElems = []
 
-  for await (const { key, value: { name } } of knownPeers.createReadStream()) {
+  for await (const { key } of knownPeers.createReadStream()) {
+    const peerProfile = knownPeersProfiles[key]
     const $wrapper = document.createElement('div')
 
     const $name = document.createElement('div')
-    $name.innerText = name
+    $name.innerText = peerProfile.name
 
     const $files = document.createElement('div')
     $files.innerText = 'No files shared'
@@ -167,7 +200,7 @@ async function render() {
     peersElems.push($wrapper)
   }
 
-  $name.innerText = `(${name})`
+  $name.innerText = `(${userProfile.name})`
   $peers.replaceChildren(...peersElems)
   $files.replaceChildren(...filesElems)
 }
@@ -175,22 +208,22 @@ async function render() {
 async function renderFolderDom({ drive, allowDeletion = false }) {
   if (!drive) return []
 
-  const files = await ls({ drive, path: '/' })
+  const files = await ls({ drive, path: '/files' })
   const filesElems = []
   for (const file of files) {
     const $wrapper = document.createElement('div')
 
     const $file = document.createElement('span')
-    $file.className = 'file'
+    $file.classList.add('file')
     $file.innerText = file.key
     $file.addEventListener('click', async () => {
       const rs = drive.createReadStream(file.key)
-      const ws = localDrive.createWriteStream(file.key)
+      const ws = userLocalDrive.createWriteStream(file.key)
       rs.pipe(ws)
     })
 
     const $delete = document.createElement('span')
-    $delete.className = 'delete'
+    $delete.classList.add('delete')
     $delete.innerText = '❌'
     $delete.addEventListener('click', () => drive.del(file.key))
 
