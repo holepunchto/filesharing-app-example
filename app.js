@@ -13,7 +13,7 @@ const userDrive = new Hyperdrive(userStore)
 const userLocalDrive = new Localdrive(downloadsFolder())
 const userProfile = {}
 const $peers = document.querySelector('#peers')
-const $files = document.querySelector('#files')
+const $sharedFiles = document.querySelector('#files')
 const $uploadFile = document.querySelector('#upload-file')
 const $createFile = document.querySelector('#create-file')
 const $name = document.querySelector('#name')
@@ -96,6 +96,7 @@ async function initSwarm() {
     const key = conn.remotePublicKey.toString('hex')
     const rpc = new ProtomuxRPC(conn)
     console.log('[connection joined]', info)
+    knownPeersOnlineStatus[key] = true
 
     userStore.replicate(conn)
 
@@ -110,6 +111,7 @@ async function initSwarm() {
 
     conn.on('close', () => {
       console.log(`[connection left] ${conn}`)
+      delete knownPeersOnlineStatus[key]
       render()
     })
 
@@ -117,9 +119,13 @@ async function initSwarm() {
     // we can get their hyperdrive key.
     // On subsequent boots we already know them, so it doesn't matter if they
     // are online or not, before we can see and download their shared files
+    // as long as someone in the network has accessed them.
     const peer = await knownPeers.get(key)
-    const knowsPeer = !!peer
-    if (knowsPeer) return
+    const isAlreadyKnownPeer = !!peer
+    if (isAlreadyKnownPeer) {
+      render()
+      return
+    }
 
     console.log('[whoareyou request This peer is new, ask them who they are')
     const reply = await rpc.request('whoareyou')
@@ -132,7 +138,6 @@ async function initSwarm() {
     startMetaWatcher(key)
     startFilesWatcher(peerDrive)
     render()
-    console.log(`[whoareyou response] peerDriveKey=${peerDriveKey}`)
   })
 
   // If this is an example app, then this key preferably should not be in sourcecode
@@ -160,65 +165,60 @@ async function startFilesWatcher(drive) {
   }
 }
 
-async function ls({ drive, path }) {
-  const stream = drive.list(path, {
-    recursive: false
-  })
-  const files = []
-  for await (const file of stream) {
-    files.push(file)
-  }
-
-  return files
-}
-
 async function render() {
-  // const peersConn = swarm.connections
-  // const hasPeers = peersConn.size > 0
-  const filesElems = await renderFolderDom({ userDrive, allowDeletion: true })
-  const hasFiles = filesElems.length > 0
-  const peersElems = []
+  const $newPeers = []
+  const $newSharedFiles = await renderFolder({ drive: userDrive, allowDeletion: true })
+  const hasFiles = $newSharedFiles.length > 0
 
   for await (const { key } of knownPeers.createReadStream()) {
-    const peerProfile = knownPeersProfiles[key]
-    const $wrapper = document.createElement('div')
-
-    const $name = document.createElement('div')
-    $name.innerText = peerProfile.name
-
-    const $files = document.createElement('div')
-    $files.innerText = 'No files shared'
-    const peerFilesElems = await renderFolderDom({
-      drive: knownPeersDrives[key],
-      allowDeletion: false
-    })
-    const hasFiles = peerFilesElems.length > 0
-    if (hasFiles) $files.replaceChildren(...peerFilesElems)
-
-    $wrapper.appendChild($name)
-    $wrapper.appendChild($files)
-    peersElems.push($wrapper)
+    $newPeers.push(await renderPeer({ key }))
   }
 
   $name.innerText = `(${userProfile.name})`
-  $peers.replaceChildren(...peersElems)
-  $files.replaceChildren(...filesElems)
+  $peers.replaceChildren(...$newPeers)
+  $sharedFiles.replaceChildren(...$newSharedFiles)
 }
 
-async function renderFolderDom({ drive, allowDeletion = false }) {
+async function renderPeer({ key }) {
+  const peerProfile = knownPeersProfiles[key]
+  const isOnline = knownPeersOnlineStatus[key]
+  const $wrapper = document.createElement('div')
+
+  const $peerName = document.createElement('div')
+  $peerName.classList.add('peer-name')
+  $peerName.classList.add(isOnline ? 'online' : 'offline')
+  $peerName.innerText = peerProfile?.name
+
+  const $peerFiles = document.createElement('div')
+  $peerFiles.innerText = 'No files shared'
+  const peerFilesElems = await renderFolder({
+    drive: knownPeersDrives[key],
+    allowDeletion: false
+  })
+  const hasFiles = peerFilesElems.length > 0
+  if (hasFiles) $peerFiles.replaceChildren(...peerFilesElems)
+
+  $wrapper.appendChild($peerName)
+  $wrapper.appendChild($peerFiles)
+
+  return $wrapper
+}
+
+async function renderFolder({ drive, allowDeletion = false }) {
   if (!drive) return []
 
-  const files = await ls({ drive, path: '/files' })
-  const filesElems = []
-  for (const file of files) {
+  const $files = []
+  const files = drive.list('/files', { recursive: false })
+  for await (const file of files) {
     const $wrapper = document.createElement('div')
 
     const $file = document.createElement('span')
+    const filename = file.key.split('/').pop()
     $file.classList.add('file')
-    $file.innerText = file.key
+    $file.innerText = filename
     $file.addEventListener('click', async () => {
       const rs = drive.createReadStream(file.key)
-      const ws = userLocalDrive.createWriteStream(file.key)
+      const ws = userLocalDrive.createWriteStream(filename)
       rs.pipe(ws)
     })
 
@@ -230,8 +230,8 @@ async function renderFolderDom({ drive, allowDeletion = false }) {
     $wrapper.appendChild($file)
     if (allowDeletion) $wrapper.appendChild($delete)
 
-    filesElems.push($wrapper)
+    $files.push($wrapper)
   }
 
-  return filesElems
+  return $files
 }
