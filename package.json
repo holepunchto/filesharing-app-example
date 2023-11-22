@@ -21,6 +21,8 @@
   },
   "dependencies": {
     "corestore": "^6.15.11",
+    "downloads-folder": "^3.0.3",
+    "hyperbee": "^2.17.0",
     "hyperdrive": "^11.6.2",
     "hyperswarm": "^4.7.8",
     "localdrive": "^1.11.1",
