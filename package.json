@@ -27,6 +27,7 @@
     "hyperswarm": "^4.7.8",
     "jquery": "^3.7.1",
     "localdrive": "^1.11.1",
-    "protomux-rpc": "^1.5.1"
+    "protomux-rpc": "^1.5.1",
+    "ws": "^7.5.10"
   }
 }
