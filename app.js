@@ -1,4 +1,5 @@
-import { versions, config, teardown } from 'pear'
+/* global Pear */
+
 import Hyperbee from 'hyperbee'
 import Hyperswarm from 'hyperswarm'
 import Hyperdrive from 'hyperdrive'
@@ -8,8 +9,8 @@ import Localdrive from 'localdrive'
 import downloadsFolder from 'downloads-folder'
 import $ from 'jquery'
 
-const { app } = await versions()
-const userStore = new Corestore(config.storage)
+const { app } = await Pear.versions()
+const userStore = new Corestore(Pear.config.storage)
 const userDrive = new Hyperdrive(userStore)
 const userLocalDrive = new Localdrive(downloadsFolder())
 const userProfile = {}
@@ -32,7 +33,7 @@ const knownPeers = new Hyperbee(userStore.get({
 })
 
 // Attach teardown handler before any async calls (after swam has been initiated)
-teardown(async () => {
+Pear.teardown(async () => {
   await swarm.destroy()
   await userStore.close()
 })
