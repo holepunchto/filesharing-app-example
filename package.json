@@ -16,8 +16,7 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "brittle": "^3.0.0",
-    "joyrider": "^1.0.0"
+    "brittle": "^3.0.0"
   },
   "dependencies": {
     "corestore": "^6.15.11",
